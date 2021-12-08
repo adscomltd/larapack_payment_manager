@@ -2,11 +2,11 @@
 
 namespace Adscom\LarapackPaymentManager\Interfaces;
 
-use App\Models\PaymentCard;
+use Adscom\LarapackPaymentManager\Contracts\PaymentCard;
 
 interface ICreditCardPaymentDriver
 {
-  public function addPaymentMethod(PaymentCard $paymentCard): array;
+  public function addCard(PaymentCard $paymentCard): array;
 
   public function deletePaymentMethod(string $id): array;
 }

@@ -2,7 +2,7 @@
 
 namespace Adscom\LarapackPaymentManager\Interfaces;
 
-use App\Models\PaymentAccount;
+use Adscom\LarapackPaymentManager\Contracts\PaymentAccount;
 use Adscom\LarapackPaymentManager\Exceptions\PaymentDriverException;
 use Exception;
 

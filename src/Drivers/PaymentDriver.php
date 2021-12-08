@@ -2,14 +2,18 @@
 
 namespace Adscom\LarapackPaymentManager\Drivers;
 
+use Adscom\LarapackPaymentManager\Contracts\Company;
+use Adscom\LarapackPaymentManager\Contracts\Order;
+use Adscom\LarapackPaymentManager\Contracts\OrderAddress;
+use Adscom\LarapackPaymentManager\Contracts\OrderItem;
+use Adscom\LarapackPaymentManager\Contracts\Payment;
+use Adscom\LarapackPaymentManager\Contracts\PaymentAccount;
+use Adscom\LarapackPaymentManager\Contracts\PaymentCard;
+use Adscom\LarapackPaymentManager\Contracts\PaymentToken;
+use Adscom\LarapackPaymentManager\Contracts\Processor;
 use Adscom\LarapackPaymentManager\Interfaces\IMakeProcessData;
-use App\Models\Company;
-use App\Models\Order;
-use App\Models\Payment;
-use App\Models\PaymentAccount;
-use App\Models\PaymentCard;
-use App\Models\PaymentGateway;
-use App\Models\Processor;
+use Adscom\LarapackPaymentManager\Traits\HasPaymentDriverMappings;
+use Adscom\LarapackPaymentManager\Traits\SupportsModelMapping;
 use App\Models\User;
 use Arr;
 use Adscom\LarapackPaymentManager\Interfaces\ITokenable;
@@ -21,6 +25,18 @@ use Illuminate\Support\Str;
 
 abstract class PaymentDriver implements IPaymentDriver
 {
+  use SupportsModelMapping, HasPaymentDriverMappings;
+
+  public const CONTRACT_PAYMENT_ACCOUNT = PaymentAccount::class;
+  public const CONTRACT_PAYMENT = Payment::class;
+  public const CONTRACT_PROCESSOR = Processor::class;
+  public const CONTRACT_COMPANY = Company::class;
+  public const CONTRACT_ORDER = Order::class;
+  public const CONTRACT_ORDER_ITEM = OrderItem::class;
+  public const CONTRACT_ORDER_ADDRESS = OrderAddress::class;
+  public const CONTRACT_PAYMENT_CARD = PaymentCard::class;
+  public const CONTRACT_PAYMENT_TOKEN = PaymentToken::class;
+
   public PaymentAccount $paymentAccount;
   public Order $order;
   public Processor $processor;
@@ -40,22 +56,19 @@ abstract class PaymentDriver implements IPaymentDriver
 
   public function __construct()
   {
-    $this->payment = new Payment();
-    $this->payment->uuid = Str::uuid()->toString();
-
-    $this->paymentResponse = PaymentResponse::fromPayment($this->payment);
+    $this->paymentResponse = PaymentResponse::fromData(['uuid' => Str::uuid()->toString()]);
   }
 
   public function setup(PaymentAccount $paymentAccount): void
   {
     $this->paymentAccount = $paymentAccount;
-    $this->processor = $this->paymentAccount->processor;
-    $this->company = $this->paymentAccount->company;
+    $this->processor = $this->paymentAccount->getProcessor();
+    $this->company = $this->paymentAccount->getCompany();
     $this->user = auth()->user();
     $this->paymentAccountData = $this->getPaymentAccountData();
     $this->config = array_merge(
-      $this->processor->config ?? [],
-      $this->paymentAccount->config ?? [],
+      $this->processor->getConfig(),
+      $this->paymentAccount->getConfig(),
     );
   }
 
@@ -118,7 +131,7 @@ abstract class PaymentDriver implements IPaymentDriver
 
   protected function handlePaymentRedirectException(PaymentRedirectionException $e): void
   {
-    $this->paymentResponse->setStatus(Payment::STATUS_INITIATED);
+    $this->paymentResponse->setStatus(self::getPaymentContractClass()::getInitiatedStatus());
     $this->paymentResponse->setResponse($e->response);
     $this->paymentResponse->setReason($e->reason);
     $this->paymentResponse->setNotes($e->notes);
@@ -135,7 +148,7 @@ abstract class PaymentDriver implements IPaymentDriver
     }
 
     if (!$this->paymentResponse->getStatus()) {
-      $this->paymentResponse->setStatus(Payment::STATUS_ERROR);
+      $this->paymentResponse->setStatus(self::getPaymentContractClass()::getErrorStatus());
     }
   }
 
@@ -148,22 +161,20 @@ abstract class PaymentDriver implements IPaymentDriver
   {
     $paymentResponse = $response ?? $this->paymentResponse;
 
-    $this->payment = Payment::create(array_merge($paymentResponse->toArray(), [
-      'order_id' => $this->order->id,
-      'processor_id' => $this->processor->id,
-      'payment_account_id' => $this->paymentAccount->id,
+    $this->payment = self::getPaymentContractClass()::create(array_merge($paymentResponse->toArray(), [
+      'order_id' => $this->order->getId(),
+      'processor_id' => $this->processor->getId(),
+      'payment_account_id' => $this->paymentAccount->getId(),
     ]));
-
-    $this->payment->save();
 
     return $this->payment;
   }
 
   final public function finalize(array $data): array
   {
-    $this->order = $this->payment->order;
+    $this->order = $this->payment->getOrder();
 
-    $this->setup($this->payment->account);
+    $this->setup($this->payment->getAccount());
 
     return $this->finalizeHandler->process($data);
   }
@@ -173,8 +184,9 @@ abstract class PaymentDriver implements IPaymentDriver
     $hashKey = 'someKey';
     $hash = request()?->hash($hashKey);
 
-    foreach ($this->order->payments as $payment) {
-      $currentHash = Arr::hash($payment->response, $hashKey);
+    /** @var Payment $payment */
+    foreach ($this->order->getPayments() as $payment) {
+      $currentHash = Arr::hash($payment->getResponse(), $hashKey);
 
       if ($hash === $currentHash) {
         return false;
@@ -187,9 +199,9 @@ abstract class PaymentDriver implements IPaymentDriver
   final public function webhook(array $data): void
   {
     $this->payment = $this->webhookHandler->getPaymentForWebhook($data);
-    $this->order = $this->payment->order;
+    $this->order = $this->payment->getOrder();
 
-    $this->setup($this->payment->account);
+    $this->setup($this->payment->getAccount());
 
     if (!$this->isWebhookUnique()) {
       abort(400, 'Duplicate webhook payload');
@@ -205,8 +217,8 @@ abstract class PaymentDriver implements IPaymentDriver
   public function getCurrentMetaData(array $additional = [], array $options = []): array
   {
     $data = [
-      'payment_uuid' => $this->payment->uuid,
-      'payment_card_uuid' => $this->paymentCard?->uuid,
+      'payment_uuid' => $this->paymentResponse->getUuid(),
+      'payment_card_uuid' => $this->paymentCard?->getUuid(),
       'payment_response' => $this->paymentResponse->toArray(),
       'payment_account_data' => $this->paymentAccountData,
     ];
@@ -217,8 +229,8 @@ abstract class PaymentDriver implements IPaymentDriver
   public function getFinalizeUrl(array $additional = [], array $options = []): string
   {
     return route('front.payment.finalize', array_merge([
-      'processor' => $this->processor->driver,
-      'uuid' => $this->payment->uuid,
+      'processor' => $this->processor->getDriver(),
+      'uuid' => $this->paymentResponse->getUuid(),
     ], $additional));
   }
 
@@ -241,9 +253,7 @@ abstract class PaymentDriver implements IPaymentDriver
 
   protected function getPaymentAccountData(): array
   {
-    $paymentAccountData = $this->paymentAccount->userData?->data;
-
-    return $paymentAccountData ?? [];
+    return $this->paymentAccount->getData();
   }
 
   protected function getSupportedCurrencies(): array
@@ -260,10 +270,10 @@ abstract class PaymentDriver implements IPaymentDriver
   {
     // set declined for CC cvc starting from 0
     if (!app()->environment('production')
-      && $this->processor->paymentGateway->name === PaymentGateway::GATEWAY_CC
-      && !($this->processor instanceof ITokenable)
+      && !($this instanceof ITokenable)
       && $this->paymentCard
-      && substr($this->paymentCard->cvc ?? '', 0, 1) === '0'
+      && $this->processor->isCC()
+      && str_starts_with($this->paymentCard->getCVC() ?? '', '0')
     ) {
       $this->setDeclineMessage('Decline Imitation');
       return true;

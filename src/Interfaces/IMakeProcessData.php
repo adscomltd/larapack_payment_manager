@@ -2,7 +2,7 @@
 
 namespace Adscom\LarapackPaymentManager\Interfaces;
 
-use App\Models\PaymentCard;
+use Adscom\LarapackPaymentManager\Contracts\PaymentCard;
 
 interface IMakeProcessData
 {

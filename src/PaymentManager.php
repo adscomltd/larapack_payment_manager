@@ -2,7 +2,7 @@
 
 namespace Adscom\LarapackPaymentManager;
 
-use App\Models\PaymentAccount;
+use Adscom\LarapackPaymentManager\Contracts\PaymentAccount;
 use Adscom\LarapackPaymentManager\Drivers\PaymentDriver;
 use Illuminate\Support\Manager;
 
@@ -13,8 +13,8 @@ class PaymentManager extends Manager
   public function setDefaultDriver(string $uuid): PaymentDriver
   {
     /** @var PaymentAccount $paymentAccount */
-    $paymentAccount = PaymentAccount::where('uuid', $uuid)->first();
-    $driverName = $paymentAccount->processor->driver;
+    $paymentAccount = PaymentDriver::getPaymentAccountContractClass()::findByUuid($uuid);
+    $driverName = $paymentAccount->getProcessor()->getDriver();
 
     /** @var PaymentDriver $driver */
     $driver = $this->driver($driverName);

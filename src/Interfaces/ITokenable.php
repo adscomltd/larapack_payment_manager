@@ -2,8 +2,8 @@
 
 namespace Adscom\LarapackPaymentManager\Interfaces;
 
-use App\Models\PaymentCard;
-use App\Models\PaymentToken;
+use Adscom\LarapackPaymentManager\Contracts\PaymentCard;
+use Adscom\LarapackPaymentManager\Contracts\PaymentToken;
 
 interface ITokenable
 {

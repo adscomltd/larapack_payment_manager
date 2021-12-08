@@ -2,7 +2,7 @@
 
 namespace Adscom\LarapackPaymentManager\Interfaces;
 
-use App\Models\Payment;
+use Adscom\LarapackPaymentManager\Contracts\Payment;
 
 interface IWebhookHandler
 {
