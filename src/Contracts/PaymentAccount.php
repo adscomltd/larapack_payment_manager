@@ -3,6 +3,7 @@
 namespace Adscom\LarapackPaymentManager\Contracts;
 
 use Adscom\LarapackPaymentManager\Drivers\PaymentDriver;
+use App\Models\User;
 
 abstract class PaymentAccount extends ModelContract
 {
@@ -31,7 +32,7 @@ abstract class PaymentAccount extends ModelContract
     return $this->model->config ?? [];
   }
 
-  abstract public function getData(): array;
+  abstract public function getData(User $user = null): array;
 
   public function getProcessor(): Processor
   {
@@ -43,7 +44,7 @@ abstract class PaymentAccount extends ModelContract
     return PaymentDriver::getCompanyContractClass()::fromModel($this->model->company);
   }
 
-  abstract public function createData(array $data): void;
+  abstract public function createData(User $user, array $data): void;
 
   public static function findByUuid(string $uuid): ?static
   {

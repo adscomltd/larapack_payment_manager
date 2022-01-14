@@ -42,12 +42,12 @@ abstract class PaymentDriver implements IPaymentDriver
   public Processor $processor;
   public PaymentResponse $paymentResponse;
   public Payment $payment;
+  public ?User $user;
   public bool $supportsWebhook = true;
   public bool $supportsFinalize = true;
 
   protected Company $company;
   protected ?PaymentCard $paymentCard;
-  protected ?User $user;
   protected array $paymentAccountData;
   public array $config;
   protected string $declineMessage;
@@ -79,13 +79,14 @@ abstract class PaymentDriver implements IPaymentDriver
 
   public function getProcessorCurrency(): string
   {
-    $current = config('currency.current')?->code;
-
-    if ($current && in_array($current, $this->getSupportedCurrencies(), true)) {
-      return $current;
-    }
-
-    return $this->getSupportedCurrencies()[0] ?? config('currency.default');
+    return $this->config['currency'];
+//    $current = config('currency.current')?->code;
+//
+//    if ($current && in_array($current, $this->getSupportedCurrencies(), true)) {
+//      return $current;
+//    }
+//
+//    return $this->getSupportedCurrencies()[0] ?? config('currency.default');
   }
 
   /**
@@ -241,9 +242,10 @@ abstract class PaymentDriver implements IPaymentDriver
     return $data;
   }
 
-  protected function setUser(User $user): void
+  public function setUser(User $user): void
   {
     $this->user = $user;
+    $this->paymentAccountData = $this->getPaymentAccountData();
   }
 
   protected function setOrder(Order $order): void
@@ -253,7 +255,7 @@ abstract class PaymentDriver implements IPaymentDriver
 
   protected function getPaymentAccountData(): array
   {
-    return $this->paymentAccount->getData();
+    return $this->paymentAccount->getData($this->user);
   }
 
   protected function getSupportedCurrencies(): array

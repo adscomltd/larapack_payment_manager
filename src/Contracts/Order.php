@@ -32,6 +32,8 @@ abstract class Order extends ModelContract
     return $this->model->processor_currency;
   }
 
+  abstract public function hasShippingData(): bool;
+
   public function getShippingName(): string
   {
     return $this->model->shipping_data['method_name'];
